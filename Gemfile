@@ -3,7 +3,7 @@ git_source(:github) { |repo| "https://github.com/#{repo}.git" }
 
 ruby '2.7.1'
 
-gem 'rails', github: 'rails/rails'
+gem 'rails', github: 'tgxworld/rails', branch: 'debug_connection'
 gem 'pg'
 # Use Puma as the app server
 gem 'puma', '~> 4.1'
