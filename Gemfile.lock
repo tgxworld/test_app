@@ -1,6 +1,6 @@
 GIT
   remote: https://github.com/tgxworld/rails.git
-  revision: 0f876cbe3f72f7a72b6574982233fb53996cee8d
+  revision: 890bb9a78fc81f97d9403f179c3f96e6ff8540c1
   branch: debug_connection
   specs:
     actioncable (6.1.0.alpha)
