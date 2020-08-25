@@ -1,0 +1,133 @@
+name: Ruby
+
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:11
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_app_test
+        ports:
+        - 5432:5432
+        # needed because the postgres container does not provide a healthcheck
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+
+    # Setup System
+    - name: Set DISPLAY
+      run: echo "::set-env name=DISPLAY:::99"
+    - uses: actions/setup-ruby@v1
+      with:
+        ruby-version: '2.6'
+    - uses: actions/setup-node@v1
+      with:
+        node-version: '13.x'
+    - uses: nanasess/setup-chromedriver@master
+    - name: "Install Bundler"
+      run: gem install bundler --no-document
+
+    # Setup App
+    - uses: actions/checkout@v1
+    - name: Get yarn cache directory path
+      id: yarn-cache-dir-path
+      run: echo "::set-output name=dir::$(yarn cache dir)"
+    - name: Get hash for the assets dir
+      run: |
+        shasum=$(find ./app/assets -type f -print0  | xargs -0 sha1sum)
+
+    # Caching
+    - uses: actions/cache@v1
+      name: Yarn Cache
+      id: yarn-cache # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
+      with:
+        path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+        key: ${{ runner.os }}-v2-yarn-${{ hashFiles('**/yarn.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-v2-yarn-
+    - uses: actions/cache@v1
+      name: Bundler Cache
+      with:
+        path: vendor/bundle
+        key: ${{ runner.os }}-v2-gems-${{ hashFiles('**/Gemfile.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-v2-gems-
+    - uses: actions/cache@v1
+      name: Packs Test Cache
+      with:
+        path: public/packs-test
+        key: ${{ runner.os }}-v2-public-packs-test-${{ hashFiles('app/assets/**/*') }}-${{ hashFiles('app/javascripts/**/*') }}-${{ hashFiles('**/yarn.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-v2-public-packs-test-
+    - uses: actions/cache@v1
+      name: Packs Cache
+      with:
+        path: public/packs
+        key: ${{ runner.os }}-v2-public-packs-${{ hashFiles('app/assets/**/*') }}-${{ hashFiles('app/javascripts/**/*') }}-${{ hashFiles('**/yarn.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-v2-public-packs-
+    - uses: actions/cache@v1
+      name: Tmp Assets Cache
+      with:
+        path: tmp/cache/assets
+        key: ${{ runner.os }}-v2-tmp-assets-${{ hashFiles('app/assets/**/*') }}-${{ hashFiles('app/javascripts/**/*') }}-${{ hashFiles('**/yarn.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-v2-tmp-assets-
+    - uses: actions/cache@v1
+      name: Tmp WebPacker Cache
+      with:
+        path: tmp/cache/webpacker
+        key: ${{ runner.os }}-v2-tmp-webpacker-${{ hashFiles('app/assets/**/*') }}-${{ hashFiles('app/javascripts/**/*') }}-${{ hashFiles('**/yarn.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-v2-tmp-webpacker-
+
+    # Install Dependencies
+    - name: Bundle Install
+      env:
+        RAILS_ENV: test
+        POSTGRES_HOST: localhost
+        POSTGRES_DB: test_app_test
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
+      run: |
+        bundle config path vendor/bundle
+        bundle install --jobs 4 --retry 3
+    - name: Yarn Install
+      env:
+        RAILS_ENV: test
+        POSTGRES_HOST: localhost
+        POSTGRES_DB: test_app_test
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
+      run: |
+        yarn install
+    - name: DB Setup
+      env:
+        RAILS_ENV: test
+        POSTGRES_HOST: localhost
+        POSTGRES_DB: test_app_test
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
+      run: |
+        bin/rails db:create db:migrate db:test:prepare
+    - name: Precompile Assets
+      run: bin/rails webpacker:compile
+
+    # Run Tests
+    - name: Run Tests
+      env:
+        RAILS_ENV: test
+        POSTGRES_HOST: localhost
+        POSTGRES_DB: test_app_test
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
+      run: bin/rails test
